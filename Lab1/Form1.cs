@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Lab1.Grammar;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -17,5 +18,10 @@ namespace Lab1
             InitializeComponent();
         }
 
+        private void button1_Click(object sender, EventArgs e)
+        {
+            var res = Calculator.Evaluate(textBox1.Text);
+            label1.Text = res.ToString();
+        }
     }
 }
