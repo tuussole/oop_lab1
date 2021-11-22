@@ -19,7 +19,7 @@ namespace Lab1.Grammar
         public override double VisitNumberExpr(LabCalculatorParser.NumberExprContext context)
         {
             var result = double.Parse(context.GetText());
-            Debug.WriteLine(result);
+            //Debug.WriteLine(result);
 
             return result;
         }
@@ -50,7 +50,7 @@ namespace Lab1.Grammar
             var left = WalkLeft(context);
             var right = WalkRight(context);
 
-            Debug.WriteLine("{0} ^ {1}", left, right);
+            //Debug.WriteLine("{0} ^ {1}", left, right);
             return System.Math.Pow(left, right);
         }
 
@@ -61,12 +61,12 @@ namespace Lab1.Grammar
 
             if (context.operatorToken.Type == LabCalculatorLexer.ADD)
             {
-                Debug.WriteLine("{0} + {1}", left, right);
+                //Debug.WriteLine("{0} + {1}", left, right);
                 return left + right;
             }
             else //LabCalculatorLexer.SUBTRACT
             {
-                Debug.WriteLine("{0} - {1}", left, right);
+               // Debug.WriteLine("{0} - {1}", left, right);
                 return left - right;
             }
         }
@@ -78,12 +78,12 @@ namespace Lab1.Grammar
 
             if (context.operatorToken.Type == LabCalculatorLexer.MULTIPLY)
             {
-                Debug.WriteLine("{0} * {1}", left, right);
+               // Debug.WriteLine("{0} * {1}", left, right);
                 return left * right;
             }
             else //LabCalculatorLexer.DIVIDE
             {
-                Debug.WriteLine("{0} / {1}", left, right);
+               // Debug.WriteLine("{0} / {1}", left, right);
                 return left / right;
             }
         }
