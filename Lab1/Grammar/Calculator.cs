@@ -1,13 +1,22 @@
 ﻿using Antlr4.Runtime;
+using Lab1.DataTable;
 using System;
 using System.Collections.Generic;
 using System.Text;
 
 namespace Lab1.Grammar
 {
-    public static class Calculator
+    public class Calculator
     {
-        public static double Evaluate(string expression)
+        private readonly LabCalculatorVisitor _visitor;
+
+
+        public Calculator(TableManager tableManager)
+        {
+            _visitor = new LabCalculatorVisitor(tableManager);
+        }
+
+        public double Evaluate(string expression)
         {
             var lexer = new LabCalculatorLexer(new AntlrInputStream(expression));
             lexer.RemoveErrorListeners();
@@ -18,10 +27,9 @@ namespace Lab1.Grammar
 
             var tree = parser.compileUnit();
 
-            var visitor = new LabCalculatorVisitor();
-
-            return visitor.Visit(tree);
+            return _visitor.Visit(tree);
         }
+
     }
 
 }

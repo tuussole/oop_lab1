@@ -5,10 +5,15 @@
  */
 
 compileUnit : expression EOF;
+
+
 expression :
  LPAREN expression RPAREN #ParenthesizedExpr
- |expression EXPONENT expression #ExponentialExpr
-    | expression operatorToken=(MULTIPLY | DIVIDE) expression #MultiplicativeExpr
+ //| operatorToken=(PLUS | MINUS) LPAREN expression RPAREN #UnaryAdditiveExpression //?
+ //| SUBTRACT  LPAREN expression RPAREN #UnaryAdditiveExpression
+ | expression EXPONENT expression #ExponentialExpr
+ | expression operatorToken=(MULTIPLY | DIVIDE) expression #MultiplicativeExpr
+ | expression operatorToken=(MOD | DIV) expression #ExtraMultiplicativeExpr
  | expression operatorToken=(ADD | SUBTRACT) expression #AdditiveExpr
  | NUMBER #NumberExpr
  | IDENTIFIER #IdentifierExpr
@@ -19,16 +24,22 @@ expression :
  */
 
 NUMBER : INT ('.' INT)?; 
-IDENTIFIER : [a-zA-Z]+[1-9][0-9]+;
+IDENTIFIER : [A-Z]+[0-9]+; 
 
 INT : ('0'..'9')+;
 
+LPAREN : '(';
+RPAREN : ')';
+COMMA : ','; //?
+//PLUS : '+'; //?
+//MINUS : '-';
 EXPONENT : '^';
+MOD : '%';
+DIV : '$';
 MULTIPLY : '*';
 DIVIDE : '/';
 SUBTRACT : '-';
 ADD : '+';
-LPAREN : '(';
-RPAREN : ')';
+
 
 WS : [ \t\r\n] -> channel(HIDDEN);

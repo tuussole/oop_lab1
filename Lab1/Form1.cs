@@ -10,96 +10,276 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Text.RegularExpressions;
+using System.Threading;
 
 namespace Lab1
 {
     public partial class Form1 : Form
     {
-        private BindingList<string> _data = new BindingList<string>();
+        private const string template = "{0}: HiddenValue:{1}, Value: {2}; Cell: {3} {4}";
+        private const string changeEvent = "ChangeEvent";
+        private const string cellBeginEdit = "CellBeginEdit";
+
+        private static readonly (int Row, int Column) NoneColumn = (-1, -1);
+
+        private (int Row, int Column) _lastChangedColumn = NoneColumn;
+
+        private Lock _lock = new Lock();
+        private Calculator _calculator;
+
+        private bool _isInRecalculation = false;
+        private bool _isCalulateSelected = false;
+        private HashSet<GrammarCell> _cellsWithIdentifier = new HashSet<GrammarCell>();
+
+        private (int Row, int Column) _selectedColumn = NoneColumn;
+
         public Form1()
         {
             InitializeComponent();
 
-            //_data.Add("test 1");
-            //_data.Add("test 1");
-            //_data.Add("test 1");
+            var tableManager = new TableManager(this.dataGridView1);
+            _calculator = new Calculator(tableManager);
 
-            //this.dataGridView1.DataSource = _data;
-            var column = new GrammarColumn();
-            column.Name = "A";
-            this.dataGridView1.Columns.Add(column);
-            
+            var column1 = new GrammarColumn();
+            column1.Name = "A";
+            this.dataGridView1.Columns.Add(column1);
+            var column2 = new GrammarColumn();
+            column2.Name = "B";
+            this.dataGridView1.Columns.Add(column2);
         }
 
         private void button1_Click(object sender, EventArgs e)
         {
-            var res = Calculator.Evaluate(textBox1.Text);
+            var res = Evaluate(textBox1.Text);           //????????
             label1.Text = res.ToString();
         }
-        const string template = "{0}: HiddenValue:{1}, Value{2}";
-        const string changeEvent = "ChangeEvent";
-        const string doubleClickEvent = "DoubleClickEvent";
-        bool isEnter = false;
 
-        private void dataGridView1_CellValueChanged(object sender, DataGridViewCellEventArgs e)
+        private async void dataGridView1_CellValueChanged(object sender, DataGridViewCellEventArgs e)
         {
-            //var cell = (GrammarCell)this.dataGridView1.Rows[e.RowIndex].Cells[e.ColumnIndex];
+            if (IsIncorrectCell(e.RowIndex, e.ColumnIndex))
+            {
+                return;
+            }
+            var currentColumn = (e.RowIndex, e.ColumnIndex);
 
-            //Debug.WriteLine(string.Format(template, changeEvent + " Before", cell.HiddenValue, cell.Value));
+            if (_lastChangedColumn != NoneColumn && _lastChangedColumn == currentColumn)
+            {
+                _lastChangedColumn = NoneColumn;
+                Debug.WriteLine("!!!Catch double event trigger");
+                return;
+            }
+            _lastChangedColumn = currentColumn;
 
-            //cell.HiddenValue = new string(cell.Value.ToString());
-            //cell.Value = Calculator.Evaluate(cell.HiddenValue);
+            if (_isInRecalculation)
+            {
+                Debug.WriteLine("In Recalculation {0} {1}", e.RowIndex, e.ColumnIndex);
 
-            //Debug.WriteLine(string.Format(template, changeEvent + " After", cell.HiddenValue, cell.Value));
+                return;
+            }
 
-            //se
+            if (_isCalulateSelected)
+            {
+                return;
+            }
+
+            var cell = GetCell(e.RowIndex, e.ColumnIndex);
+
+
+            try
+            {
+                await _lock.EnterLock();
+
+                Debug.WriteLine(template, changeEvent + " Before", cell.HiddenValue, cell.Value, e.RowIndex, e.ColumnIndex);
+
+                cell.HiddenValue = new string(cell.Value.ToString());
+                AfterChangeCell(cell);
+
+                Debug.WriteLine(template, changeEvent + " After", cell.HiddenValue, cell.Value, e.RowIndex, e.ColumnIndex);
+            }
+            finally
+            {
+                _lock.LeaveLock();
+            }
         }
 
-        private void dataGridView1_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
+        private async void dataGridView1_CellBeginEdit(object sender, DataGridViewCellCancelEventArgs e)
         {
-            var cell = (GrammarCell)this.dataGridView1.Rows[e.RowIndex].Cells[e.ColumnIndex];
+            if (IsIncorrectCell(e.RowIndex, e.ColumnIndex))
+            {
+                return;
+            }
 
-            Debug.WriteLine(string.Format(template, doubleClickEvent + " Before", cell.HiddenValue, cell.Value));
+            var cell = GetCell(e.RowIndex, e.ColumnIndex);
 
-            cell.Value = cell.HiddenValue;
-            //cell.EditedFormattedValue = cell.HiddenValue;
+            try
+            {
+                await _lock.EnterLock();
 
-            Debug.WriteLine(string.Format(template, doubleClickEvent + " After", cell.HiddenValue, cell.Value));
+                Debug.WriteLine(template, cellBeginEdit + " Before", cell.HiddenValue, cell.Value, e.RowIndex, e.ColumnIndex);
+
+                cell.Value = cell.HiddenValue;
+
+                Debug.WriteLine(template, cellBeginEdit + " After", cell.HiddenValue, cell.Value, e.RowIndex, e.ColumnIndex);
+            }
+            finally
+            {
+                _lock.LeaveLock();
+            }
         }
 
-        private void dataGridView1_CellEnter(object sender, DataGridViewCellEventArgs e)
+        private void Add(object sender, EventArgs e)
         {
-            //isEnter = true;
-            //Debug.WriteLine("Enter " + isEnter);
+            //Debug.Write("");
+            var column = new GrammarColumn();
+            var name = ColumnHelper.FirstColumnName;
+            if (this.dataGridView1.Columns.Count > 0)
+            {
+                var lastColumn = this.dataGridView1.Columns[this.dataGridView1.Columns.Count - 1];
+                var lastColumnName = ColumnHelper.ConvertColumnNameToChar(lastColumn.Name) + 1;
+                name = (char)lastColumnName;
+            }
+            this.dataGridView1.Columns.Add(column);
+            column.Name = name.ToString();
         }
 
-        private void dataGridView1_CellLeave(object sender, DataGridViewCellEventArgs e)
+        private void Remove(object sender, EventArgs e)
         {
-            //isEnter = false;
-            //Debug.WriteLine("Leave " + isEnter);
+            if (this.dataGridView1.Columns.Count > 0)
+            {
+                var columnIndex = this.dataGridView1.ColumnCount - 1;
+                var lastColumn = this.dataGridView1.Columns[columnIndex];
 
+                bool shouldRemove = true;
+                bool alreadyAsked = false;
 
-            //var cell = (GrammarCell)this.dataGridView1.Rows[e.RowIndex].Cells[e.ColumnIndex];
+                foreach(var row in this.dataGridView1.Rows)
+                {
+                    var lastCell = (GrammarCell)((DataGridViewRow)row).Cells[columnIndex];
 
-            //Debug.WriteLine(string.Format(template, changeEvent + " Before", cell.HiddenValue, cell.Value));
+                    if (_cellsWithIdentifier.Contains(lastCell))
+                    {
+                        if (!alreadyAsked)
+                        {
+                            var result = MessageBox.Show("Last Column is used in other cell. Do you want to continue removing?", "Oops", MessageBoxButtons.YesNo);
 
-            //cell.HiddenValue = cell.EditedFormattedValue.ToString();
-            //cell.Value = Calculator.Evaluate(cell.HiddenValue);
+                            shouldRemove = result == DialogResult.Yes;
+                            alreadyAsked = true;
 
-            //Debug.WriteLine(string.Format(template, changeEvent + " After", cell.HiddenValue, cell.Value));
+                            if (!shouldRemove)
+                            {
+                                break;
+                            }
+                        }
+
+                        _cellsWithIdentifier.Remove(lastCell);
+                    }
+                }
+
+                if (shouldRemove)
+                {
+                    this.dataGridView1.Columns.Remove(lastColumn);
+                }
+            }
         }
 
-        private void dataGridView1_CellEndEdit(object sender, DataGridViewCellEventArgs e)
+        private string Evaluate(string value)
         {
-            var cell = (GrammarCell)this.dataGridView1.Rows[e.RowIndex].Cells[e.ColumnIndex];
+            var returnValue = string.Empty;
+            try
+            {
+                returnValue = _calculator.Evaluate(value).ToString();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message);
+            }
 
-            Debug.WriteLine(string.Format(template, changeEvent + " Before", cell.HiddenValue, cell.Value));
+            return returnValue;
+        }
 
-            cell.HiddenValue = cell.Value.ToString();
-            cell.Value = Calculator.Evaluate(cell.HiddenValue);
+        private void RecalculateAllCells()
+        {
+            _isInRecalculation = true;
+            foreach(var cell in _cellsWithIdentifier)
+            {
+                CalculateCellValue(cell);
+            }
+            _isInRecalculation = false;
+        }
 
-            Debug.WriteLine(string.Format(template, changeEvent + " After", cell.HiddenValue, cell.Value));
+        private void CalculateCellValue(GrammarCell cell)
+        {
+            cell.Value = Evaluate(cell.HiddenValue);
+        }
 
+        private void AddToQueueIfContainsIdentifier(GrammarCell cell)
+        {
+            if(Regex.IsMatch(cell.HiddenValue, ColumnHelper.IdentifierPattern))
+            {
+                if (!_cellsWithIdentifier.Contains(cell))
+                {
+                    _cellsWithIdentifier.Add(cell);
+                }
+            }
+            else
+            {
+                if (_cellsWithIdentifier.Contains(cell))
+                {
+                    _cellsWithIdentifier.Remove(cell);
+                }
+            }
+
+        }
+
+        private GrammarCell GetCell(int rowIndex, int columnIndex)
+        {
+            return (GrammarCell)this.dataGridView1.Rows[rowIndex].Cells[columnIndex];
+        }
+
+        private void dataGridView1_CellClick(object sender, DataGridViewCellEventArgs e)
+        {
+            if (IsIncorrectCell(e.RowIndex, e.ColumnIndex))
+            {
+                return;
+            }
+            var cell = GetCell(e.RowIndex, e.ColumnIndex);
+
+            this.textBox1.Text = cell.HiddenValue;
+
+            _selectedColumn = (e.RowIndex, e.ColumnIndex);
+        }
+
+        private void button3_Click(object sender, EventArgs e)
+        {
+            if(IsIncorrectCell(_selectedColumn.Row, _selectedColumn.Column))
+            {
+                return;
+            }
+
+            var cell = GetCell(_selectedColumn.Row, _selectedColumn.Column);
+
+            _isCalulateSelected = true;
+
+            cell.HiddenValue = this.textBox1.Text;
+            AfterChangeCell(cell);
+
+            _isCalulateSelected = false;
+        }
+
+        public bool IsIncorrectCell(int rowIndex, int columnIndex)
+        {
+            var isIncorrectRow = rowIndex < 0 || rowIndex >= this.dataGridView1.RowCount;
+            var isIncorrectColumn = columnIndex < 0 || columnIndex >= this.dataGridView1.ColumnCount;
+
+            return isIncorrectRow || isIncorrectColumn;
+        }
+
+        private void AfterChangeCell(GrammarCell cell)
+        {
+            CalculateCellValue(cell);
+            AddToQueueIfContainsIdentifier(cell);
+            RecalculateAllCells();
         }
     }
 }

@@ -1,15 +1,21 @@
-﻿using System;
+﻿using Antlr4.Runtime.Misc;
+using Lab1.DataTable;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Lab1.Grammar
 {
-    class LabCalculatorVisitor : LabCalculatorBaseVisitor<double>
+    public class LabCalculatorVisitor : LabCalculatorBaseVisitor<double>
     {
-        //таблиця ідентифікаторів (тут для прикладу)
-        //в лабораторній роботі заміните на свою!!!!
-        Dictionary<string, double> tableIdentifier = new Dictionary<string, double>();
+        private readonly TableManager _tableManager;
+
+        public LabCalculatorVisitor(TableManager tableManager)
+        {
+            _tableManager = tableManager;
+        }
 
         public override double VisitCompileUnit(LabCalculatorParser.CompileUnitContext context)
         {
@@ -28,16 +34,22 @@ namespace Lab1.Grammar
         public override double VisitIdentifierExpr(LabCalculatorParser.IdentifierExprContext context)
         {
             var result = context.GetText();
-            double value;
-            //видобути значення змінної з таблиці
-            if (tableIdentifier.TryGetValue(result.ToString(), out value))
+
+            if(!Regex.IsMatch(result, ColumnHelper.IdentifierPattern))
             {
-                return value;
+                throw new ArgumentException($"Incorrect identifier {result}");
             }
-            else
-            {
-                return 0.0;
-            }
+
+            var columnName = result[0].ToString();
+            var columnIndex = ColumnHelper.GetColumnNumber(columnName);
+
+            var rowIndex = int.Parse(result[1].ToString());
+
+            // As first element in array is 0
+            // but first human enter element is 1
+            rowIndex--;
+
+            return _tableManager.GetValue(columnIndex, rowIndex);
         }
 
         public override double VisitParenthesizedExpr(LabCalculatorParser.ParenthesizedExprContext context)
@@ -71,8 +83,29 @@ namespace Lab1.Grammar
             }
         }
 
+        //public override double VisitUnaryAdditiveExpression([NotNull] LabCalculatorParser.UnaryAdditiveExpressionContext context)
+        //{
+        //    //var left = WalkLeft(context);
+        //    //if (context.operatorToken.Type == LabCalculatorLexer.PLUS)
+        //    //{
+        //    //    //Debug.WriteLine();
+        //    //    return left;
+        //    //}
+        //    //else //LabCalculatorLexer.MINUS
+        //    //{
+        //    //    // Debug.WriteLine();
+        //    //    return -left;
+        //    //}
+
+
+        //    var left = WalkLeft(context);
+        //    return -left;
+        //}
+
         public override double VisitMultiplicativeExpr(LabCalculatorParser.MultiplicativeExprContext context)
         {
+            var text = context.GetText();
+
             var left = WalkLeft(context);
             var right = WalkRight(context);
 
@@ -85,6 +118,23 @@ namespace Lab1.Grammar
             {
                // Debug.WriteLine("{0} / {1}", left, right);
                 return left / right;
+            }
+        }
+
+        public override double VisitExtraMultiplicativeExpr(LabCalculatorParser.ExtraMultiplicativeExprContext context)  //expr mod expr / mod(expr, expr)
+        {
+            var left = WalkLeft(context);
+            var right = WalkRight(context);
+
+            if (context.operatorToken.Type == LabCalculatorLexer.MOD)
+            {
+                // Debug.WriteLine("{0} * {1}", left, right);
+                return left % right;
+            }
+            else //LabCalculatorLexer.DIVIDE
+            {
+                // Debug.WriteLine("{0} / {1}", left, right);
+                return (double)(int)((int)left / (int)right); //????
             }
         }
 
